@@ -20,12 +20,14 @@ describe('useExcelParser', () => {
     { label: '入职日期', field: 'hireDate', type: 'date' }
   ]
 
+  const parser = useExcelParser()
+
   it('parses valid Excel and maps columns by label', async () => {
     const file = await makeExcelFile(
       ['姓名', '年龄', '入职日期'],
       [['张三', 28, new Date(2024, 0, 15)], ['李四', 35, new Date(2023, 5, 1)]]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(2)
     expect(result.rows[0].userName).toBe('张三')
     expect(result.rows[0].age).toBe(28)
@@ -41,7 +43,7 @@ describe('useExcelParser', () => {
       ['姓名', '年龄'],
       [['张三', 28], [], ['李四', 35]]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(2)
   })
 
@@ -50,7 +52,7 @@ describe('useExcelParser', () => {
       ['姓名', '年龄', '备注'],
       [['张三', 28, 'extra info']]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(1)
     expect(Object.keys(result.rows[0])).toEqual(['userName', 'age'])
   })
@@ -60,7 +62,7 @@ describe('useExcelParser', () => {
       ['姓名', '年龄'],
       [['张三', 28]]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(1)
     // hireDate column not in Excel but in config — value should be undefined
     expect(result.rows[0].hireDate).toBeUndefined()
@@ -71,7 +73,7 @@ describe('useExcelParser', () => {
       ['姓名', '年龄'],
       [['张三', 'not-a-number']]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.parseErrors.length).toBeGreaterThan(0)
     expect(result.parseErrors[0].type).toBe('type-conversion')
     expect(result.parseErrors[0].field).toBe('age')
@@ -79,14 +81,14 @@ describe('useExcelParser', () => {
 
   it('handles empty Excel file (header only, no data rows)', async () => {
     const file = await makeExcelFile(['姓名', '年龄'], [])
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(0)
     expect(result.headers).toEqual(['姓名', '年龄'])
   })
 
   it('returns parsed headers from Excel', async () => {
     const file = await makeExcelFile(['A', 'B', 'C'], [['1', '2', '3']])
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.headers).toEqual(['A', 'B', 'C'])
   })
 
@@ -96,7 +98,7 @@ describe('useExcelParser', () => {
       ['姓名*', '年龄', '入职日期*'],
       [['张三', 28, new Date(2024, 0, 15)]]
     )
-    const result = await useExcelParser(file, columns)
+    const result = await parser.parse(file, columns)
     expect(result.totalRows).toBe(1)
     expect(result.rows[0].userName).toBe('张三')
     expect(result.parseErrors).toHaveLength(0)

@@ -2,11 +2,11 @@
   <div class="excel-uploader">
     <div
       class="upload-area"
-      @dragover.prevent="dragging = true"
+      @dragover.prevent="disabled || (dragging = true)"
       @dragleave.prevent="dragging = false"
-      @drop.prevent="onDrop"
-      @click="triggerInput"
-      :class="{ 'is-dragging': dragging }"
+      @drop.prevent="disabled || onDrop()"
+      @click="disabled || triggerInput()"
+      :class="{ 'is-dragging': dragging, 'is-disabled': disabled }"
     >
       <div v-if="!file" class="upload-placeholder">
         <div class="upload-icon">📁</div>
@@ -49,8 +49,10 @@ import { ElMessage } from 'element-plus'
 
 const props = withDefaults(defineProps<{
   showTemplateButton?: boolean
+  disabled?: boolean
 }>(), {
-  showTemplateButton: true
+  showTemplateButton: true,
+  disabled: false
 })
 
 const emit = defineEmits<{
@@ -79,9 +81,9 @@ function onFileChange(e: Event) {
   }
 }
 
-function onDrop(e: DragEvent) {
+function onDrop(e?: DragEvent) {
   dragging.value = false
-  const files = e.dataTransfer?.files
+  const files = e?.dataTransfer?.files
   if (files?.length) {
     selectFile(files[0])
   }
@@ -127,6 +129,12 @@ function formatSize(bytes: number): string {
 .upload-area.is-dragging {
   border-color: #409eff;
   background: rgba(64, 158, 255, 0.04);
+}
+
+.upload-area.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .upload-icon { font-size: 40px; margin-bottom: 8px; }

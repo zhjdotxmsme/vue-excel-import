@@ -2,10 +2,22 @@
   <div class="excel-import">
     <ExcelUploader
       :show-template-button="showTemplateButton"
+      :disabled="isParsing"
       @file-selected="onFileSelected"
       @file-cleared="onFileCleared"
       @download-template="onDownloadTemplate"
     />
+
+    <!-- Parsing progress bar -->
+    <div v-if="isParsing" class="parsing-progress">
+      <p class="parsing-label">正在解析 Excel 文件...</p>
+      <el-progress
+        :percentage="parsingProgress"
+        :stroke-width="20"
+        :text-inside="true"
+        :status="parsingProgress >= 100 ? 'success' : undefined"
+      />
+    </div>
 
     <ExcelPreview
       v-if="validationResult.rows.length > 0"
@@ -58,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type {
   ColumnConfig, ParseResult, ValidationResult,
@@ -72,6 +84,8 @@ import ExcelUploader from './ExcelUploader.vue'
 import ExcelPreview from './ExcelPreview.vue'
 import ExcelCellEdit from './ExcelCellEdit.vue'
 import SubmitBar from './SubmitBar.vue'
+
+const parser = useExcelParser()
 
 const props = withDefaults(defineProps<{
   columns: ColumnConfig[]
@@ -102,7 +116,9 @@ const emit = defineEmits<{
 
 // State
 const submitting = ref(false)
+const isParsing = ref(false)
 const parseErrors = ref<CellError[]>([])
+const parsingProgress = ref(0)
 const validationResult = reactive<ValidationResult>({
   valid: true, total: 0, validCount: 0, errorCount: 0, errors: [], rows: []
 })
@@ -119,7 +135,6 @@ const editErrors = ref<CellError[]>([])
 const editRowData = ref<Record<string, any> | null>(null)
 
 let currentFile: File | null = null
-let currentRows: Record<string, any>[] = []
 
 async function onFileSelected(file: File) {
   const maxBytes = props.maxFileSize! * 1024 * 1024
@@ -130,23 +145,36 @@ async function onFileSelected(file: File) {
 
   currentFile = file
 
+  // Reset previous data
+  onFileCleared()
+
   try {
-    const parseResult = await useExcelParser(file, props.columns)
-    currentRows = parseResult.rows
+    isParsing.value = true
+
+    // Parse in Web Worker — UI stays responsive
+    const parseResult = await parser.parse(file, props.columns)
+
     parseErrors.value = parseResult.parseErrors
 
+    // Validate
     const vResult = useExcelValidator(parseResult.rows, props.columns)
     Object.assign(validationResult, vResult)
 
     emit('parsed', parseResult)
   } catch (err: any) {
     ElMessage.error(`解析失败: ${err.message}`)
+  } finally {
+    isParsing.value = false
   }
 }
 
+// Sync progress from parser
+watch(parser.progress, (val) => {
+  parsingProgress.value = val
+})
+
 function onFileCleared() {
   currentFile = null
-  currentRows = []
   parseErrors.value = []
   validationResult.total = 0
   validationResult.validCount = 0
@@ -247,5 +275,18 @@ async function onSubmit() {
 .excel-import {
   max-width: 960px;
   margin: 0 auto;
+}
+
+.parsing-progress {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.parsing-label {
+  font-size: 14px;
+  color: #606266;
+  margin: 0 0 8px 0;
 }
 </style>
