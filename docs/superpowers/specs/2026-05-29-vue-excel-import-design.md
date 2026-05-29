@@ -125,6 +125,36 @@ src/
     → useExcelSubmitter 分批提交 → 成功回调 / 失败+回滚
 ```
 
+### 列顺序策略
+
+Excel 列顺序与配置的 `columns[]` 顺序不一致时：
+
+- **列匹配**：始终按 `label` 文本匹配，与顺序无关
+- **预览展示顺序**：按 `columns[]` 配置顺序展示（方案 A）
+- **模板下载顺序**：同样按 `columns[]` 配置顺序
+- **未匹配列处理**：Excel 中存在但配置中未定义的列 → 解析时忽略，不展示
+- **缺失列处理**：配置中存在但 Excel 中找不到对应 label 的列 → 该列所有值为空（或 default），参与校验
+
+### 数据类型转换策略
+
+根据 `column.type` 对 ExcelJS 读取的原始值进行类型转换。转换失败不中断解析，收集到 `parseErrors`。
+
+| 原始值 \ 目标类型 | string | number | boolean | date |
+|---|---|---|---|---|
+| string | 保留，trim 前后空格 | parseError | "true"/"false"/"yes"/"no" 映射，否则 parseError | parseError |
+| number | 自动转字符串，如 25 → "25" | 保留数字 | 0→false, 非0→true | 序列号逻辑 |
+| boolean | "true"/"false" | true→1, false→0 | 保留 | parseError |
+| Date | 格式化为 YYYY-MM-DD | 转时间戳（或 parseError） | parseError | 格式化为 YYYY-MM-DD |
+| null/空 | default ?? "" | default ?? null | default ?? null | default ?? null |
+| RichText | 拼接纯文本 | parseError | parseError | parseError |
+| Error(#N/A) | "#N/A" 或 parseError | parseError | parseError | parseError |
+
+**日期特殊处理：**
+- Date 对象 → 直接格式化
+- 数字 > 100000 → Unix 毫秒时间戳
+- 数字 ≤ 100000 → Excel 序列号（1900-01-01 起天数）
+- 字符串 → `new Date()` 解析
+
 ### 组件职责
 
 **ExcelImport.vue** — 主组件，负责：
