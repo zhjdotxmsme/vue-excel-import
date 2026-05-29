@@ -37,6 +37,7 @@ export interface ParseResult {
   rows: Record<string, any>[]
   totalRows: number
   parseErrors: CellError[]
+  sheets: string[]
 }
 
 export interface RowWithErrors {

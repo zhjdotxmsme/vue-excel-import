@@ -3,12 +3,31 @@ import ExcelJS from 'exceljs'
 import type { ColumnConfig } from '../types'
 import { useExcelParser } from './useExcelParser'
 
-// Helper: create an in-memory Excel file from headers + rows
-async function makeExcelFile(headers: string[], rows: any[][]): Promise<File> {
+// Helper: create an in-memory Excel file from headers + rows (multi-sheet support)
+async function makeExcelFile(
+  sheets: { name: string; headers: string[]; rows: any[][] }[]
+): Promise<File>
+async function makeExcelFile(headers: string[], rows: any[][]): Promise<File>
+async function makeExcelFile(
+  arg1: string[] | { name: string; headers: string[]; rows: any[][] }[],
+  arg2?: any[][]
+): Promise<File> {
   const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet('Sheet1')
-  ws.addRow(headers)
-  rows.forEach(r => ws.addRow(r))
+
+  if (Array.isArray(arg1) && typeof arg1[0] === 'string') {
+    // Legacy: single sheet
+    const ws = wb.addWorksheet('Sheet1')
+    ws.addRow(arg1)
+    ;(arg2 ?? []).forEach(r => ws.addRow(r))
+  } else {
+    // Multi-sheet
+    for (const sheet of arg1 as { name: string; headers: string[]; rows: any[][] }[]) {
+      const ws = wb.addWorksheet(sheet.name)
+      ws.addRow(sheet.headers)
+      sheet.rows.forEach(r => ws.addRow(r))
+    }
+  }
+
   const buf = await wb.xlsx.writeBuffer()
   return new File([buf], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }
@@ -102,5 +121,28 @@ describe('useExcelParser', () => {
     expect(result.totalRows).toBe(1)
     expect(result.rows[0].userName).toBe('张三')
     expect(result.parseErrors).toHaveLength(0)
+  })
+
+  it('parses multiple sheets and merges rows', async () => {
+    const file = await makeExcelFile([
+      { name: '员工A组', headers: ['姓名', '年龄'], rows: [['张三', 28], ['李四', 35]] },
+      { name: '员工B组', headers: ['姓名', '年龄'], rows: [['王五', 42]] }
+    ])
+    const result = await parser.parse(file, columns)
+    expect(result.totalRows).toBe(3)
+    expect(result.sheets).toEqual(['员工A组', '员工B组'])
+    expect(result.rows[0].userName).toBe('张三')
+    expect(result.rows[2].userName).toBe('王五')
+    expect(result.parseErrors).toHaveLength(0)
+  })
+
+  it('parses sheets with same header structure', async () => {
+    const file = await makeExcelFile([
+      { name: 'Sheet1', headers: ['姓名', '年龄'], rows: [['张三', 28]] },
+      { name: 'Sheet2', headers: ['姓名', '年龄'], rows: [['李四', 35]] }
+    ])
+    const result = await parser.parse(file, columns)
+    expect(result.totalRows).toBe(2)
+    expect(result.sheets).toEqual(['Sheet1', 'Sheet2'])
   })
 })

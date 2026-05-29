@@ -19,6 +19,12 @@
       />
     </div>
 
+    <!-- Sheet info -->
+    <div v-if="sheetNames.length > 0" class="sheet-info">
+      <span class="sheet-badge">{{ sheetNames.length }} 个 Sheet</span>
+      <span class="sheet-detail">{{ sheetNames.join(' · ') }}</span>
+    </div>
+
     <ExcelPreview
       v-if="validationResult.rows.length > 0"
       :columns="columns"
@@ -119,6 +125,7 @@ const submitting = ref(false)
 const isParsing = ref(false)
 const parseErrors = ref<CellError[]>([])
 const parsingProgress = ref(0)
+const sheetNames = ref<string[]>([])
 const validationResult = reactive<ValidationResult>({
   valid: true, total: 0, validCount: 0, errorCount: 0, errors: [], rows: []
 })
@@ -155,6 +162,7 @@ async function onFileSelected(file: File) {
     const parseResult = await parser.parse(file, props.columns)
 
     parseErrors.value = parseResult.parseErrors
+    sheetNames.value = parseResult.sheets ?? []
 
     // Validate
     const vResult = useExcelValidator(parseResult.rows, props.columns)
@@ -288,5 +296,32 @@ async function onSubmit() {
   font-size: 14px;
   color: #606266;
   margin: 0 0 8px 0;
+}
+
+.sheet-info {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: #0ea5e9;
+  color: white;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.sheet-detail {
+  color: #0369a1;
 }
 </style>

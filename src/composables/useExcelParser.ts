@@ -91,7 +91,8 @@ export function useExcelParser(): UseExcelParserReturn {
               headers: resultHeaders,
               rows: accumulatedRows,
               totalRows: msg.totalRows ?? accumulatedRows.length,
-              parseErrors: accumulatedErrors
+              parseErrors: accumulatedErrors,
+              sheets: msg.sheets ?? []
             })
             break
           }
@@ -149,54 +150,62 @@ async function fallbackParse(
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(buffer)
 
-  const worksheet = workbook.worksheets[0]
-  if (!worksheet) {
+  if (workbook.worksheets.length === 0) {
     return {
       headers: [],
       rows: [],
       totalRows: 0,
-      parseErrors: [{ row: 0, field: '', value: null, message: '工作表中没有数据', type: 'parse' }]
+      parseErrors: [{ row: 0, field: '', value: null, message: '工作表中没有数据', type: 'parse' }],
+      sheets: []
     }
   }
 
   const errors: CellError[] = []
   const rows: Record<string, any>[] = []
+  const sheetNames: string[] = []
   let headers: string[] = []
-  const headerIndexMap = new Map<number, ColumnConfig>()
   const maxLimit = maxRows ?? Infinity
+  let firstSheet = true
 
-  const headerRow = worksheet.getRow(1)
-  headerRow.eachCell((cell, colIdx) => {
-    const rawLabel = String(cell.value ?? '').trim()
-    headers.push(rawLabel)
-    const cleanLabel = rawLabel.replace(/\s*\*+\s*$/, '')
-    const config = columns.find(c => c.label === cleanLabel)
-    if (config) headerIndexMap.set(colIdx, config)
-  })
+  for (const worksheet of workbook.worksheets) {
+    if (!worksheet) continue
+    sheetNames.push(worksheet.name)
 
-  worksheet.eachRow({ includeEmpty: false }, (row, rowIdx) => {
-    if (rowIdx === 1) return
-    if (rows.length >= maxLimit) return false
+    const headerIndexMap = new Map<number, ColumnConfig>()
 
-    const rowData: Record<string, any> = {}
-    row.eachCell((cell, colIdx) => {
-      const isEmpty = cell.value === null || cell.value === undefined || cell.value === ''
-      const config = headerIndexMap.get(colIdx)
-      if (!config) return
-      const result = convertValue(cell.value, config.type ?? 'string')
-      rowData[config.field] = result.value
-      if (result.error) {
-        errors.push({
-          row: rowIdx,
-          field: config.field,
-          value: cell.value,
-          message: result.error,
-          type: 'type-conversion'
-        })
-      }
+    const headerRow = worksheet.getRow(1)
+    headerRow.eachCell((cell, colIdx) => {
+      const rawLabel = String(cell.value ?? '').trim()
+      if (firstSheet) headers.push(rawLabel)
+      const cleanLabel = rawLabel.replace(/\s*\*+\s*$/, '')
+      const config = columns.find(c => c.label === cleanLabel)
+      if (config) headerIndexMap.set(colIdx, config)
     })
-    rows.push(rowData)
-  })
+    firstSheet = false
 
-  return { headers, rows, totalRows: rows.length, parseErrors: errors }
+    worksheet.eachRow({ includeEmpty: false }, (row, rowIdx) => {
+      if (rowIdx === 1) return
+      if (rows.length >= maxLimit) return false
+
+      const rowData: Record<string, any> = {}
+      row.eachCell((cell, colIdx) => {
+        const config = headerIndexMap.get(colIdx)
+        if (!config) return
+        const result = convertValue(cell.value, config.type ?? 'string')
+        rowData[config.field] = result.value
+        if (result.error) {
+          errors.push({
+            row: rows.length + 1,
+            field: config.field,
+            value: cell.value,
+            message: result.error,
+            type: 'type-conversion'
+          })
+        }
+      })
+      rows.push(rowData)
+    })
+  }
+
+  return { headers, rows, totalRows: rows.length, parseErrors: errors, sheets: sheetNames }
 }
