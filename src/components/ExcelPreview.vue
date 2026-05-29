@@ -32,7 +32,7 @@
             <span>{{ r.data[col.field] ?? '' }}</span>
             <el-tooltip
               v-if="hasCellError(r, col.field)"
-              :content="getCellErrors(r, col.field).map(e => e.message).join('; ')"
+              :content="getCellErrors(r, col.field).map((e: any) => e.message).join('; ')"
               placement="top"
               effect="dark"
             >

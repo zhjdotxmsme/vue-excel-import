@@ -70,7 +70,7 @@ export async function useExcelTemplate(
       const colLetter = String.fromCharCode(64 + colIdx)
       const firstRow = headerRowIndex + 1
       const lastRow = Math.max(firstRow, ws.rowCount)
-      ws.dataValidations.add(`${colLetter}${firstRow}:${colLetter}${lastRow}`, {
+      ;(ws as any).dataValidations.add(`${colLetter}${firstRow}:${colLetter}${lastRow}`, {
         type: 'list',
         formulae: [enumValidator.enum.join(',')],
         showErrorMessage: true,

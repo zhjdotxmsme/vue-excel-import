@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import dts from 'vite-plugin-dts'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), dts({ insertTypesEntry: true })],
   resolve: { alias: { '@': resolve(__dirname, 'src') } },
   build: {
     lib: {
@@ -14,6 +15,7 @@ export default defineConfig({
     rollupOptions: {
       external: ['vue', 'element-plus', 'exceljs'],
       output: {
+        exports: 'named',
         globals: {
           vue: 'Vue',
           'element-plus': 'ElementPlus',

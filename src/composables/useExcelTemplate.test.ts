@@ -55,7 +55,7 @@ describe('useExcelTemplate', () => {
     await workbook.xlsx.load(await blobToArrayBuffer(blob))
     const ws = workbook.worksheets[0]
     // Column C (部门) should have data validation
-    const validations = ws.dataValidations as any
+    const validations = (ws as any).dataValidations
     expect(validations).toBeDefined()
   })
 
