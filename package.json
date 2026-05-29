@@ -1,0 +1,41 @@
+{
+  "name": "@scope/vue-excel-import",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/vue-excel-import.umd.cjs",
+  "module": "./dist/vue-excel-import.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/vue-excel-import.js",
+      "require": "./dist/vue-excel-import.umd.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./dist/style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0",
+    "element-plus": "^2.8.0"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "~5.4.0",
+    "vite": "^5.4.0",
+    "vue-tsc": "^2.0.0",
+    "vitest": "^2.0.0",
+    "jsdom": "^24.0.0"
+  }
+}
