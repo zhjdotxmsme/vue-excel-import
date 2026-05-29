@@ -89,4 +89,16 @@ describe('useExcelParser', () => {
     const result = await useExcelParser(file, columns)
     expect(result.headers).toEqual(['A', 'B', 'C'])
   })
+
+  it('strips * marker from headers when matching column configs (template compatibility)', async () => {
+    // Template adds * for required columns, e.g. "姓名*" instead of "姓名"
+    const file = await makeExcelFile(
+      ['姓名*', '年龄', '入职日期*'],
+      [['张三', 28, new Date(2024, 0, 15)]]
+    )
+    const result = await useExcelParser(file, columns)
+    expect(result.totalRows).toBe(1)
+    expect(result.rows[0].userName).toBe('张三')
+    expect(result.parseErrors).toHaveLength(0)
+  })
 })

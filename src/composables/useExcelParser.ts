@@ -44,9 +44,11 @@ export async function useExcelParser(
   // Read header row (row 1) and map column indices to configs
   const headerRow = worksheet.getRow(1)
   headerRow.eachCell((cell, colIdx) => {
-    const label = String(cell.value ?? '').trim()
-    headers.push(label)
-    const config = columns.find(c => c.label === label)
+    const rawLabel = String(cell.value ?? '').trim()
+    headers.push(rawLabel)
+    // Strip * markers (from template download) before matching against column labels
+    const cleanLabel = rawLabel.replace(/\s*\*+\s*$/, '')
+    const config = columns.find(c => c.label === cleanLabel)
     if (config) headerIndexMap.set(colIdx, config)
   })
 
