@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "vite demo --config vite.config.ts",
     "build": "vue-tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest"
