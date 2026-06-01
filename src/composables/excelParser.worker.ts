@@ -1,6 +1,8 @@
 import { readXlsx } from 'hucre/xlsx'
-import type { ColumnConfig, CellError } from '../types'
+import type { ColumnConfig, CellError, CellValue } from '../types'
 import { convertValue } from '../utils/excel'
+import { detectHeaderTree, matchColumnTree, type MergeRange, type MatchResult } from '../utils/header-tree'
+import { setNested } from '../utils/column'
 
 interface ParseRequest {
   type: 'parse'
@@ -30,34 +32,44 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
     let batch: Record<string, any>[] = []
     let globalRowIndex = 0
     let firstSheet = true
+    let firstMatchResult: MatchResult | null = null
     let headers: string[] = []
     const matchedLabels = new Set<string>()
     const maxLimit = maxRows ?? Infinity
 
     for (const sheet of workbook.sheets) {
-      const headerIndexMap = new Map<number, ColumnConfig>()
       const rawRows = sheet.rows
 
       if (rawRows.length === 0) continue
 
-      // First row is the header row
-      const headerRow = rawRows[0]
-      if (headerRow) {
-        headerRow.forEach((cellValue, colIdx) => {
-          const label = String(cellValue ?? '').trim()
-          if (firstSheet) headers.push(label)
-          const cleanLabel = label.replace(/\s*\*+\s*$/, '')
-          const config = columns.find(c => c.label === cleanLabel)
-          if (config) {
-            headerIndexMap.set(colIdx, config)
-            matchedLabels.add(config.label)
-          }
-        })
+      // Detect header tree from merged cells
+      const excelTree = detectHeaderTree(rawRows, { merges: (sheet as any).merges })
+
+      // Match against user config
+      const matchResult = matchColumnTree(excelTree, columns)
+      const headerIndexMap = matchResult.columnMap
+
+      // Save first match result for diagnostics
+      if (!firstMatchResult) {
+        firstMatchResult = matchResult
+      }
+
+      // Collect leaf headers for backward-compat headers array (first sheet only)
+      if (firstSheet) {
+        headers = collectLeafLabels(excelTree)
       }
       firstSheet = false
 
-      // Process data rows (skip header row index 0)
-      for (let rowIdx = 1; rowIdx < rawRows.length; rowIdx++) {
+      // Track matched labels for diagnostics
+      for (const [, cfg] of headerIndexMap) {
+        matchedLabels.add(cfg.label)
+      }
+
+      // Determine how many header rows exist (to skip them)
+      const headerRowCount = detectHeaderRowCount(rawRows, (sheet as any).merges)
+
+      // Process data rows (skip header rows)
+      for (let rowIdx = headerRowCount; rowIdx < rawRows.length; rowIdx++) {
         if (globalRowIndex >= maxLimit) break
 
         const row = rawRows[rowIdx]
@@ -73,7 +85,7 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
             hasContent = true
           }
           const result = convertValue(cellValue, config.type ?? 'string')
-          rowData[config.field] = result.value
+          setNested(rowData, config.field, result.value)
           if (result.error) {
             errors.push({
               row: globalRowIndex + 1,
@@ -102,10 +114,7 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
     const missingColumns = columns
       .filter(c => !matchedLabels.has(c.label))
       .map(c => c.label)
-    const unmatchedHeaders = headers.filter(h => {
-      const cleaned = h.replace(/\s*\*+\s*$/, '')
-      return !columns.some(c => c.label === cleaned)
-    })
+    const unmatchedHeaders = firstMatchResult?.unmatchedHeaders ?? []
 
     // Signal completion with sheet info and header diagnostics
     self.postMessage({
@@ -135,4 +144,25 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
       message: err?.message ?? '解析 Excel 文件时发生未知错误'
     })
   }
+}
+
+function collectLeafLabels(nodes: ColumnConfig[]): string[] {
+  const result: string[] = []
+  for (const n of nodes) {
+    if (n.children && n.children.length > 0) {
+      result.push(...collectLeafLabels(n.children))
+    } else {
+      result.push(n.label)
+    }
+  }
+  return result
+}
+
+function detectHeaderRowCount(rows: CellValue[][], merges?: MergeRange[]): number {
+  if (!merges || merges.length === 0) return 1
+  let maxRow = 0
+  for (const m of merges) {
+    if (m.endRow + 1 > maxRow) maxRow = m.endRow + 1
+  }
+  return Math.min(maxRow, rows.length)
 }
