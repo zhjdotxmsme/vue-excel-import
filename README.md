@@ -6,7 +6,7 @@
 
 - 📤 **拖拽上传** — 支持拖拽和点击选择 .xlsx/.xls 文件
 - 📋 **模板下载** — 根据列配置自动生成 Excel 模板（含下拉验证、必填标记）
-- 🔄 **流式解析** — 使用 ExcelJS 逐行读取，只解析有内容行，避免浏览器崩溃
+- 🔄 **流式解析** — 使用 hucre 解析，只读取有内容行，避免浏览器崩溃
 - ⚙️ **列配置** — 动态配置列映射（Excel 表头 ⇢ 业务字段）、列类型、列选择
 - ✅ **6 种校验** — required / unique / range / pattern / enum / 自定义（支持异步）
 - 📊 **数据预览** — 分页表格展示，错误单元格红色高亮 + hover 提示
@@ -23,7 +23,7 @@ npm install @scope/vue-excel-import
 **peer 依赖**（需确保项目中已安装）：
 
 ```bash
-npm install vue@^3.4 element-plus@^2.8 exceljs@^4.4
+npm install vue@^3.4 element-plus@^2.8
 ```
 
 ## 快速开始
