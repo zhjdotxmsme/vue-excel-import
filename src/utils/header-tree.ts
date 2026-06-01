@@ -212,3 +212,82 @@ function buildTreeFromPaths(paths: ColPath[]): ColumnConfig[] {
 
   return result
 }
+
+// ── Column matching ────────────────────────────────────────────────
+
+export interface MatchResult {
+  /** Map of Excel column index → ColumnConfig leaf (columnIndex 0-based) */
+  columnMap: Map<number, ColumnConfig>
+  /** Labels in ColumnConfig that were NOT found in the Excel header tree */
+  missingColumns: string[]
+  /** Labels in Excel that were NOT matched to any ColumnConfig */
+  unmatchedHeaders: string[]
+}
+
+/**
+ * Collect all leaf labels from a ColumnConfig tree.
+ * A leaf is a node that has `field` defined (i.e. a data column).
+ */
+export function collectLeafLabels(nodes: ColumnConfig[]): string[] {
+  const result: string[] = []
+  for (const node of nodes) {
+    if (node.children && node.children.length > 0) {
+      result.push(...collectLeafLabels(node.children))
+    } else if (node.field) {
+      result.push(node.label)
+    }
+  }
+  return result
+}
+
+/**
+ * Match a user's ColumnConfig against a detected Excel header tree.
+ *
+ * Traverses both trees in parallel by `label`.  For each Excel leaf node
+ * that finds a matching user-config leaf, the column index (`_colIdx`) is
+ * recorded in the returned `columnMap`.
+ */
+export function matchColumnTree(
+  excelTree: ColumnConfig[],
+  userConfig: ColumnConfig[]
+): MatchResult {
+  const columnMap = new Map<number, ColumnConfig>()
+  const unmatchedHeaders: string[] = []
+  const matchedConfigLabels = new Set<string>()
+
+  function walk(excelNodes: ColumnConfig[], configNodes: ColumnConfig[]): void {
+    for (const excelNode of excelNodes) {
+      const configNode = configNodes.find(c => c.label === excelNode.label)
+
+      if (!configNode) {
+        // No matching config node
+        if (!excelNode.children || excelNode.children.length === 0) {
+          // Leaf excel node → unmatched header
+          unmatchedHeaders.push(excelNode.label)
+        }
+        // Group node with no config match: skip entirely (no recursion)
+        continue
+      }
+
+      if (configNode.children && configNode.children.length > 0) {
+        // Config node is a group — recurse into children
+        walk(excelNode.children || [], configNode.children)
+      } else if (configNode.field) {
+        // Config node is a leaf — extract column index
+        const colIdx = (excelNode as any)._colIdx
+        if (colIdx !== undefined) {
+          columnMap.set(colIdx, configNode)
+        }
+        matchedConfigLabels.add(configNode.label)
+      }
+    }
+  }
+
+  walk(excelTree, userConfig)
+
+  // Determine missing columns: config leaf labels never matched
+  const allConfigLabels = collectLeafLabels(userConfig)
+  const missingColumns = allConfigLabels.filter(l => !matchedConfigLabels.has(l))
+
+  return { columnMap, missingColumns, unmatchedHeaders }
+}

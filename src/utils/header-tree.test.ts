@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { detectHeaderTree } from './header-tree'
+import { detectHeaderTree, matchColumnTree, collectLeafLabels } from './header-tree'
 import type { MergeRange } from './header-tree'
+import type { ColumnConfig } from '../types'
 
 /** Helper: assert a ColumnConfig is a leaf with the given label and _colIdx */
 function expectLeaf(
@@ -283,5 +284,122 @@ describe('detectHeaderTree', () => {
       expectLeaf(result[0] as any, '姓名', 0)
       expectLeaf(result[1] as any, '年龄', 1)
     })
+  })
+})
+
+// ── matchColumnTree ────────────────────────────────────────────────
+
+describe('matchColumnTree', () => {
+  it('flat match: maps all excel columns to config correctly', () => {
+    const excelTree: ColumnConfig[] = [
+      { label: '姓名', _colIdx: 0 } as ColumnConfig,
+      { label: '年龄', _colIdx: 1 } as ColumnConfig,
+    ]
+    const userConfig: ColumnConfig[] = [
+      { label: '姓名', field: 'userName' },
+      { label: '年龄', field: 'age' },
+    ]
+
+    const result = matchColumnTree(excelTree, userConfig)
+
+    expect(result.columnMap.size).toBe(2)
+    expect(result.columnMap.get(0)?.field).toBe('userName')
+    expect(result.columnMap.get(1)?.field).toBe('age')
+    expect(result.missingColumns).toEqual([])
+    expect(result.unmatchedHeaders).toEqual([])
+  })
+
+  it('nested match: maps columns through group nodes', () => {
+    const excelTree: ColumnConfig[] = [
+      {
+        label: '基本信息',
+        children: [
+          { label: '姓名', _colIdx: 0 } as ColumnConfig,
+          { label: '年龄', _colIdx: 1 } as ColumnConfig,
+        ],
+      },
+      {
+        label: '联系方式',
+        children: [
+          { label: '邮箱', _colIdx: 2 } as ColumnConfig,
+        ],
+      },
+    ]
+    const userConfig: ColumnConfig[] = [
+      {
+        label: '基本信息',
+        children: [
+          { label: '姓名', field: 'userName' },
+          { label: '年龄', field: 'age' },
+        ],
+      },
+      {
+        label: '联系方式',
+        children: [
+          { label: '邮箱', field: 'email' },
+        ],
+      },
+    ]
+
+    const result = matchColumnTree(excelTree, userConfig)
+
+    expect(result.columnMap.size).toBe(3)
+    expect(result.columnMap.get(0)?.field).toBe('userName')
+    expect(result.columnMap.get(1)?.field).toBe('age')
+    expect(result.columnMap.get(2)?.field).toBe('email')
+    expect(result.missingColumns).toEqual([])
+    expect(result.unmatchedHeaders).toEqual([])
+  })
+
+  it('reports unmatched excel headers when excel has extra column', () => {
+    const excelTree: ColumnConfig[] = [
+      { label: '姓名', _colIdx: 0 } as ColumnConfig,
+      { label: '年龄', _colIdx: 1 } as ColumnConfig,
+    ]
+    const userConfig: ColumnConfig[] = [
+      { label: '姓名', field: 'userName' },
+    ]
+
+    const result = matchColumnTree(excelTree, userConfig)
+
+    expect(result.columnMap.size).toBe(1)
+    expect(result.columnMap.get(0)?.field).toBe('userName')
+    expect(result.missingColumns).toEqual([])
+    expect(result.unmatchedHeaders).toEqual(['年龄'])
+  })
+
+  it('reports missing columns when config has extra column', () => {
+    const excelTree: ColumnConfig[] = [
+      { label: '姓名', _colIdx: 0 } as ColumnConfig,
+    ]
+    const userConfig: ColumnConfig[] = [
+      { label: '姓名', field: 'userName' },
+      { label: '年龄', field: 'age' },
+    ]
+
+    const result = matchColumnTree(excelTree, userConfig)
+
+    expect(result.columnMap.size).toBe(1)
+    expect(result.columnMap.get(0)?.field).toBe('userName')
+    expect(result.missingColumns).toEqual(['年龄'])
+    expect(result.unmatchedHeaders).toEqual([])
+  })
+
+  it('handles partial match with both missing and unmatched columns', () => {
+    const excelTree: ColumnConfig[] = [
+      { label: 'A', _colIdx: 0 } as ColumnConfig,
+      { label: 'C', _colIdx: 1 } as ColumnConfig,
+    ]
+    const userConfig: ColumnConfig[] = [
+      { label: 'A', field: 'a' },
+      { label: 'B', field: 'b' },
+    ]
+
+    const result = matchColumnTree(excelTree, userConfig)
+
+    expect(result.columnMap.size).toBe(1)
+    expect(result.columnMap.get(0)?.field).toBe('a')
+    expect(result.missingColumns).toEqual(['B'])
+    expect(result.unmatchedHeaders).toEqual(['C'])
   })
 })
