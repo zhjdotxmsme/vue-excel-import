@@ -1,13 +1,16 @@
 export type ColumnType = 'string' | 'number' | 'boolean' | 'date'
 
+export type CellValue = string | number | boolean | Date | null
+
 export interface ColumnConfig {
   label: string
-  field: string
+  field?: string
   type?: ColumnType
   required?: boolean
   default?: any
   description?: string
   validators?: ValidatorConfig[]
+  children?: ColumnConfig[]
 }
 
 export interface ValidatorConfig {
