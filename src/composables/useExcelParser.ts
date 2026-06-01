@@ -221,11 +221,11 @@ async function fallbackParse(
           hasContent = true
         }
         const result = convertValue(cellValue, config.type ?? 'string')
-        setNested(rowData, config.field, result.value)
+        setNested(rowData, config.field!, result.value)
         if (result.error) {
           errors.push({
             row: allRows.length + 1,
-            field: config.field,
+            field: config.field!,
             value: cellValue,
             message: result.error,
             type: 'type-conversion'

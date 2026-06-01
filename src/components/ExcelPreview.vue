@@ -17,8 +17,8 @@
       <el-table-column type="index" label="#" width="50" fixed />
       <el-table-column
         v-for="col in visibleColumns"
-        :key="col.field"
-        :prop="col.field"
+        :key="col.field!"
+        :prop="col.field!"
         :label="col.label"
         :width="colWidth(col)"
         show-overflow-tooltip
@@ -26,13 +26,13 @@
         <template #default="{ row: r, $index }">
           <div
             class="cell-wrapper"
-            :class="{ 'cell-error': hasCellError(r, col.field), 'cell-required': col.required }"
-            @dblclick="startEdit(r, col.field, $index)"
+            :class="{ 'cell-error': hasCellError(r, col.field!), 'cell-required': col.required }"
+            @dblclick="startEdit(r, col.field!, $index)"
           >
-            <span>{{ getNested(r.data, col.field) ?? '' }}</span>
+            <span>{{ getNested(r.data, col.field!) ?? '' }}</span>
             <el-tooltip
-              v-if="hasCellError(r, col.field)"
-              :content="getCellErrors(r, col.field).map((e: any) => e.message).join('; ')"
+              v-if="hasCellError(r, col.field!)"
+              :content="getCellErrors(r, col.field!).map((e: any) => e.message).join('; ')"
               placement="top"
               effect="dark"
             >
