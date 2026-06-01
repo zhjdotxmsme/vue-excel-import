@@ -29,7 +29,7 @@
             :class="{ 'cell-error': hasCellError(r, col.field), 'cell-required': col.required }"
             @dblclick="startEdit(r, col.field, $index)"
           >
-            <span>{{ r.data[col.field] ?? '' }}</span>
+            <span>{{ getNested(r.data, col.field) ?? '' }}</span>
             <el-tooltip
               v-if="hasCellError(r, col.field)"
               :content="getCellErrors(r, col.field).map((e: any) => e.message).join('; ')"
@@ -67,6 +67,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { ColumnConfig, RowWithErrors } from '../types'
+import { getNested, flattenColumns } from '../utils/column'
 
 const props = defineProps<{
   columns: ColumnConfig[]
@@ -81,7 +82,7 @@ const emit = defineEmits<{
 const currentPage = ref(1)
 const pageSize = 100
 
-const visibleColumns = computed(() => props.columns)
+const visibleColumns = computed(() => flattenColumns(props.columns))
 const total = computed(() => props.rows.length)
 
 const paginatedRows = computed(() => {
