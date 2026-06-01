@@ -1,35 +1,38 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import ExcelJS from 'exceljs'
+import { writeXlsx } from 'hucre/xlsx'
 import type { ColumnConfig } from '../types'
 import { useExcelParser } from './useExcelParser'
 
 // Helper: create an in-memory Excel file from headers + rows (multi-sheet support)
 async function makeExcelFile(
-  sheets: { name: string; headers: string[]; rows: any[][] }[]
-): Promise<File>
-async function makeExcelFile(headers: string[], rows: any[][]): Promise<File>
-async function makeExcelFile(
-  arg1: string[] | { name: string; headers: string[]; rows: any[][] }[],
-  arg2?: any[][]
+  sheets: { name: string; headers: string[]; rows: any[][] }[] | string[],
+  rows?: any[][]
 ): Promise<File> {
-  const wb = new ExcelJS.Workbook()
+  const sheetList: { name: string; rows: any[][] }[] = []
 
-  if (Array.isArray(arg1) && typeof arg1[0] === 'string') {
+  if (Array.isArray(sheets) && typeof sheets[0] === 'string') {
     // Legacy: single sheet
-    const ws = wb.addWorksheet('Sheet1')
-    ws.addRow(arg1)
-    ;(arg2 ?? []).forEach(r => ws.addRow(r))
+    sheetList.push({
+      name: 'Sheet1',
+      rows: [sheets as string[], ...(rows ?? [])]
+    })
   } else {
     // Multi-sheet
-    for (const sheet of arg1 as { name: string; headers: string[]; rows: any[][] }[]) {
-      const ws = wb.addWorksheet(sheet.name)
-      ws.addRow(sheet.headers)
-      sheet.rows.forEach(r => ws.addRow(r))
+    for (const sheet of sheets as { name: string; headers: string[]; rows: any[][] }[]) {
+      sheetList.push({
+        name: sheet.name,
+        rows: [sheet.headers, ...sheet.rows]
+      })
     }
   }
 
-  const buf = await wb.xlsx.writeBuffer()
-  return new File([buf], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const uint8 = await writeXlsx({
+    sheets: sheetList.map(s => ({
+      name: s.name,
+      rows: s.rows
+    }))
+  })
+  return new File([uint8], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }
 
 describe('useExcelParser', () => {
