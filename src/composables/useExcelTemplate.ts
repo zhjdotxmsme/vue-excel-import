@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs'
+import { writeXlsx } from 'hucre/xlsx'
 import type { ColumnConfig } from '../types'
 
 interface TemplateOptions {
@@ -15,80 +15,94 @@ export async function useExcelTemplate(
   if (!columns || columns.length === 0) {
     throw new Error('列配置不能为空，请先配置 columns')
   }
-  const workbook = new ExcelJS.Workbook()
-  const sheetName = options?.sheetName ?? 'Sheet1'
-  const ws = workbook.addWorksheet(sheetName)
 
-  // Optional description row
-  let headerRowIndex = 1
+  // Build rows: description (optional) + header + example rows
+  const rows: any[][] = []
+
   if (options?.description) {
-    ws.addRow([options.description])
-    headerRowIndex = 2
+    rows.push([options.description])
   }
 
-  // Header row
-  const headerLabels = columns.map(col => {
-    return col.required ? `${col.label} *` : col.label
-  })
-  ws.addRow(headerLabels)
+  // Header row: bold by default via style
+  const headerLabels = columns.map(col =>
+    col.required ? `${col.label} *` : col.label
+  )
+  rows.push(headerLabels)
 
-  // Style header row
-  const headerExcelRow = ws.getRow(headerRowIndex)
-  headerExcelRow.font = { bold: true }
-  headerExcelRow.height = 28
-
-  // Optional example rows
+  // Example rows
   if (options?.exampleRows && options.exampleRows > 0) {
     const now = new Date()
     for (let i = 0; i < options.exampleRows; i++) {
-      const exampleRow = columns.map(col => {
-        switch (col.type) {
-          case 'number': return 0
-          case 'date': return now
-          case 'boolean': return true
-          default: return ''
-        }
-      })
-      ws.addRow(exampleRow)
+      rows.push(
+        columns.map(col => {
+          switch (col.type) {
+            case 'number': return 0
+            case 'date': return now
+            case 'boolean': return true
+            default: return ''
+          }
+        })
+      )
     }
   }
 
-  // Set column widths and formats
-  columns.forEach((col, idx) => {
-    const colIdx = idx + 1
-    ws.getColumn(colIdx).width = 18
-
-    switch (col.type) {
-      case 'number':
-        ws.getColumn(colIdx).numFmt = '0'
-        break
-      case 'date':
-        ws.getColumn(colIdx).numFmt = 'yyyy-mm-dd'
-        break
+  // Build column definitions with widths and formatting
+  const headerRowIndex = options?.description ? 2 : 1
+  const sheetColumns = columns.map((col, idx) => {
+    const def: any = {
+      header: headerLabels[idx],
+      width: 18
     }
 
-    // Data validation for enum columns
+    // Number/date formatting via column numFmt
+    if (col.type === 'number') {
+      def.style = { numFmt: '0' }
+    } else if (col.type === 'date') {
+      def.style = { numFmt: 'yyyy-mm-dd' }
+    }
+
+    return def
+  })
+
+  // Data validations for enum columns
+  const dataValidations: any[] = []
+  columns.forEach((col, idx) => {
     const enumValidator = col.validators?.find(v => v.type === 'enum')
     if (enumValidator?.enum && enumValidator.enum.length > 0) {
-      const colLetter = String.fromCharCode(64 + colIdx)
-      const firstRow = headerRowIndex + 1
-      const lastRow = Math.max(firstRow, ws.rowCount)
-      ;(ws as any).dataValidations.add(`${colLetter}${firstRow}:${colLetter}${lastRow}`, {
+      const colLetter = String.fromCharCode(65 + idx)
+      const lastRow = rows.length
+      dataValidations.push({
         type: 'list',
-        formulae: [enumValidator.enum.join(',')],
+        values: enumValidator.enum,
+        ranges: [`${colLetter}${headerRowIndex}:${colLetter}${Math.max(headerRowIndex, lastRow)}`],
         showErrorMessage: true,
         errorTitle: '输入错误',
-        error: `请选择: ${enumValidator.enum.join(', ')}`
+        errorMessage: `请选择: ${enumValidator.enum.join(', ')}`
       })
     }
   })
 
-  // Freeze header row
-  ws.views = [{ state: 'frozen', ySplit: headerRowIndex }]
+  // Build the sheet
+  const sheet: any = {
+    name: options?.sheetName ?? 'Sheet1',
+    rows,
+    freezePane: { rows: headerRowIndex }
+  }
 
-  // Generate blob
-  const buffer = await workbook.xlsx.writeBuffer()
-  return new Blob([buffer], {
+  // Add column definitions if we have any with styles
+  if (sheetColumns.some((c: any) => c.style)) {
+    sheet.columns = sheetColumns
+  }
+
+  // Add data validations
+  if (dataValidations.length > 0) {
+    sheet.dataValidations = dataValidations
+  }
+
+  // Write to XLSX
+  const uint8 = await writeXlsx({ sheets: [sheet] })
+
+  return new Blob([uint8], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   })
 }
