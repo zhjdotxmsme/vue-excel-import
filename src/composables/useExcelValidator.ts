@@ -1,4 +1,5 @@
 import type { ColumnConfig, ValidationResult, RowWithErrors, CellError, ValidatorConfig } from '../types'
+import { getNested, flattenColumns } from '../utils/column'
 
 function runValidator(
   value: any,
@@ -19,7 +20,7 @@ function runValidator(
     }
 
     case 'unique': {
-      const count = allData.filter(d => d[field] === value).length
+      const count = allData.filter(d => getNested(d, field) === value).length
       if (count > 1) {
         return { row: rowIdx, field, value, message: msg || `值 "${value}" 已存在`, type: 'unique' }
       }
@@ -87,19 +88,20 @@ function runValidationSync(
     const rowErrors: CellError[] = []
     const rowNum = idx + 1
 
-    for (const col of columns) {
-      const value = data[col.field]
+    const leafColumns = flattenColumns(columns)
+    for (const col of leafColumns) {
+      const value = getNested(data, col.field!)
 
       // Handle required from ColumnConfig.required
       if (col.required && (value === null || value === undefined || value === '')) {
-        rowErrors.push({ row: rowNum, field: col.field, value, message: '此字段为必填项', type: 'required' })
+        rowErrors.push({ row: rowNum, field: col.field!, value, message: '此字段为必填项', type: 'required' })
         continue
       }
 
       if (col.validators) {
         for (const vc of col.validators) {
           if (vc.type === 'required') continue
-          const err = runValidator(value, data, rows, vc, col.field, rowNum)
+          const err = runValidator(value, data, rows, vc, col.field!, rowNum)
           if (err) rowErrors.push(err as CellError)
         }
       }
@@ -123,18 +125,19 @@ async function runValidationAsync(
     const rowErrors: CellError[] = []
     const rowNum = idx + 1
 
-    for (const col of columns) {
-      const value = data[col.field]
+    const leafColumns = flattenColumns(columns)
+    for (const col of leafColumns) {
+      const value = getNested(data, col.field!)
 
       if (col.required && (value === null || value === undefined || value === '')) {
-        rowErrors.push({ row: rowNum, field: col.field, value, message: '此字段为必填项', type: 'required' })
+        rowErrors.push({ row: rowNum, field: col.field!, value, message: '此字段为必填项', type: 'required' })
         continue
       }
 
       if (col.validators) {
         for (const vc of col.validators) {
           if (vc.type === 'required') continue
-          const err = await runValidator(value, data, rows, vc, col.field, rowNum)
+          const err = await runValidator(value, data, rows, vc, col.field!, rowNum)
           if (err) rowErrors.push(err)
         }
       }
