@@ -1,5 +1,7 @@
 import { ref, readonly, type Ref } from 'vue'
-import type { ColumnConfig, ParseResult, CellError } from '../types'
+import type { ColumnConfig, ParseResult, CellError, CellValue } from '../types'
+import { detectHeaderTree, matchColumnTree, type MergeRange, type MatchResult } from '../utils/header-tree'
+import { setNested } from '../utils/column'
 
 /**
  * Read a File/Blob as ArrayBuffer.
@@ -169,30 +171,42 @@ async function fallbackParse(
   let firstSheet = true
 
   const matchedLabels = new Set<string>()
+  let firstMatchResult: MatchResult | null = null
 
   for (const sheet of workbook.sheets) {
-    const headerIndexMap = new Map<number, ColumnConfig>()
     const rawRows = sheet.rows
     if (rawRows.length === 0) continue
 
-    // First row is the header
-    const headerRow = rawRows[0]
-    if (headerRow) {
-      headerRow.forEach((cellValue, colIdx) => {
-        const label = String(cellValue ?? '').trim()
-        if (firstSheet) headers.push(label)
-        const cleanLabel = label.replace(/\s*\*+\s*$/, '')
-        const config = columns.find(c => c.label === cleanLabel)
-        if (config) {
-          headerIndexMap.set(colIdx, config)
-          matchedLabels.add(config.label)
-        }
-      })
+    // Detect header tree from merged cells
+    const excelTree = detectHeaderTree(rawRows, { merges: (sheet as any).merges })
+    // Strip trailing * markers from tree labels for matching (template compatibility)
+    const cleanTree = excelTree.map(stripAsteriskNode)
+
+    // Match against user config
+    const matchResult = matchColumnTree(cleanTree, columns)
+    const headerIndexMap = matchResult.columnMap
+
+    // Save first match result for diagnostics
+    if (!firstMatchResult) {
+      firstMatchResult = matchResult
+    }
+
+    // Collect leaf headers (first sheet only)
+    if (firstSheet) {
+      headers = collectLeafLabels(cleanTree)
     }
     firstSheet = false
 
+    // Track matched labels for diagnostics
+    for (const [, cfg] of headerIndexMap) {
+      matchedLabels.add(cfg.label)
+    }
+
+    // Determine header row count to know where data starts
+    const headerRowCount = detectHeaderRowCount(rawRows, (sheet as any).merges)
+
     // Process data rows (skip header index 0)
-    for (let rowIdx = 1; rowIdx < rawRows.length; rowIdx++) {
+    for (let rowIdx = headerRowCount; rowIdx < rawRows.length; rowIdx++) {
       if (allRows.length >= maxLimit) break
 
       const row = rawRows[rowIdx]
@@ -207,7 +221,7 @@ async function fallbackParse(
           hasContent = true
         }
         const result = convertValue(cellValue, config.type ?? 'string')
-        rowData[config.field] = result.value
+        setNested(rowData, config.field, result.value)
         if (result.error) {
           errors.push({
             row: allRows.length + 1,
@@ -226,13 +240,39 @@ async function fallbackParse(
   const missingColumns = columns
     .filter(c => !matchedLabels.has(c.label))
     .map(c => c.label)
-  const unmatchedHeaders = headers.filter(h => {
-    const cleaned = h.replace(/\s*\*+\s*$/, '')
-    return !columns.some(c => c.label === cleaned)
-  })
+  const unmatchedHeaders = firstMatchResult?.unmatchedHeaders ?? []
 
   return {
     headers, rows: allRows, totalRows: allRows.length, parseErrors: errors, sheets: sheetNames,
     missingColumns, unmatchedHeaders
   }
+}
+
+function collectLeafLabels(nodes: ColumnConfig[]): string[] {
+  const result: string[] = []
+  for (const n of nodes) {
+    if (n.children && n.children.length > 0) {
+      result.push(...collectLeafLabels(n.children))
+    } else {
+      result.push(n.label)
+    }
+  }
+  return result
+}
+
+function stripAsteriskNode(n: ColumnConfig): ColumnConfig {
+  return {
+    ...n,
+    label: n.label.replace(/\s*\*+\s*$/, ''),
+    children: n.children ? n.children.map(stripAsteriskNode) : undefined
+  }
+}
+
+function detectHeaderRowCount(rows: CellValue[][], merges?: MergeRange[]): number {
+  if (!merges || merges.length === 0) return 1
+  let maxRow = 0
+  for (const m of merges) {
+    if (m.endRow + 1 > maxRow) maxRow = m.endRow + 1
+  }
+  return Math.min(maxRow, rows.length)
 }
