@@ -92,7 +92,9 @@ export function useExcelParser(): UseExcelParserReturn {
               rows: accumulatedRows,
               totalRows: msg.totalRows ?? accumulatedRows.length,
               parseErrors: accumulatedErrors,
-              sheets: msg.sheets ?? []
+              sheets: msg.sheets ?? [],
+              missingColumns: msg.missingColumns,
+              unmatchedHeaders: msg.unmatchedHeaders
             })
             break
           }
@@ -166,6 +168,8 @@ async function fallbackParse(
   const maxLimit = maxRows ?? Infinity
   let firstSheet = true
 
+  const matchedLabels = new Set<string>()
+
   for (const sheet of workbook.sheets) {
     const headerIndexMap = new Map<number, ColumnConfig>()
     const rawRows = sheet.rows
@@ -179,7 +183,10 @@ async function fallbackParse(
         if (firstSheet) headers.push(label)
         const cleanLabel = label.replace(/\s*\*+\s*$/, '')
         const config = columns.find(c => c.label === cleanLabel)
-        if (config) headerIndexMap.set(colIdx, config)
+        if (config) {
+          headerIndexMap.set(colIdx, config)
+          matchedLabels.add(config.label)
+        }
       })
     }
     firstSheet = false
@@ -216,5 +223,16 @@ async function fallbackParse(
     }
   }
 
-  return { headers, rows: allRows, totalRows: allRows.length, parseErrors: errors, sheets: sheetNames }
+  const missingColumns = columns
+    .filter(c => !matchedLabels.has(c.label))
+    .map(c => c.label)
+  const unmatchedHeaders = headers.filter(h => {
+    const cleaned = h.replace(/\s*\*+\s*$/, '')
+    return !columns.some(c => c.label === cleaned)
+  })
+
+  return {
+    headers, rows: allRows, totalRows: allRows.length, parseErrors: errors, sheets: sheetNames,
+    missingColumns, unmatchedHeaders
+  }
 }

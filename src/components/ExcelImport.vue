@@ -25,6 +25,26 @@
       <span class="sheet-detail">{{ sheetNames.join(' · ') }}</span>
     </div>
 
+    <!-- Header-column mismatch warnings -->
+    <el-alert
+      v-if="missingColumns.length > 0"
+      :title="'Excel 中缺少配置列: ' + missingColumns.join('、')"
+      type="warning"
+      show-icon
+      :closable="false"
+      description="请检查模板是否正确，缺少的列数据将无法导入"
+      style="margin-bottom: 12px"
+    />
+    <el-alert
+      v-if="unmatchedHeaders.length > 0"
+      :title="'Excel 中存在未配置的列: ' + unmatchedHeaders.join('、')"
+      type="info"
+      show-icon
+      :closable="false"
+      description="这些列将被忽略，如需导入请补充 columns 配置"
+      style="margin-bottom: 12px"
+    />
+
     <ExcelPreview
       v-if="validationResult.rows.length > 0"
       :columns="columns"
@@ -126,6 +146,8 @@ const isParsing = ref(false)
 const parseErrors = ref<CellError[]>([])
 const parsingProgress = ref(0)
 const sheetNames = ref<string[]>([])
+const missingColumns = ref<string[]>([])
+const unmatchedHeaders = ref<string[]>([])
 const validationResult = reactive<ValidationResult>({
   valid: true, total: 0, validCount: 0, errorCount: 0, errors: [], rows: []
 })
@@ -163,6 +185,8 @@ async function onFileSelected(file: File) {
 
     parseErrors.value = parseResult.parseErrors
     sheetNames.value = parseResult.sheets ?? []
+    missingColumns.value = parseResult.missingColumns ?? []
+    unmatchedHeaders.value = parseResult.unmatchedHeaders ?? []
 
     // Validate
     const vResult = useExcelValidator(parseResult.rows, props.columns)
@@ -184,6 +208,8 @@ watch(parser.progress, (val) => {
 function onFileCleared() {
   currentFile = null
   parseErrors.value = []
+  missingColumns.value = []
+  unmatchedHeaders.value = []
   validationResult.total = 0
   validationResult.validCount = 0
   validationResult.errorCount = 0

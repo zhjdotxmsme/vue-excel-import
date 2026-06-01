@@ -31,6 +31,7 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
     let globalRowIndex = 0
     let firstSheet = true
     let headers: string[] = []
+    const matchedLabels = new Set<string>()
     const maxLimit = maxRows ?? Infinity
 
     for (const sheet of workbook.sheets) {
@@ -47,7 +48,10 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
           if (firstSheet) headers.push(label)
           const cleanLabel = label.replace(/\s*\*+\s*$/, '')
           const config = columns.find(c => c.label === cleanLabel)
-          if (config) headerIndexMap.set(colIdx, config)
+          if (config) {
+            headerIndexMap.set(colIdx, config)
+            matchedLabels.add(config.label)
+          }
         })
       }
       firstSheet = false
@@ -94,8 +98,24 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
     // Send remaining data
     if (batch.length > 0) flush()
 
-    // Signal completion with sheet info
-    self.postMessage({ type: 'done', totalRows: globalRowIndex, totalErrors: errors.length, sheets: sheetNames })
+    // Compute column matching diagnostics
+    const missingColumns = columns
+      .filter(c => !matchedLabels.has(c.label))
+      .map(c => c.label)
+    const unmatchedHeaders = headers.filter(h => {
+      const cleaned = h.replace(/\s*\*+\s*$/, '')
+      return !columns.some(c => c.label === cleaned)
+    })
+
+    // Signal completion with sheet info and header diagnostics
+    self.postMessage({
+      type: 'done',
+      totalRows: globalRowIndex,
+      totalErrors: errors.length,
+      sheets: sheetNames,
+      missingColumns,
+      unmatchedHeaders
+    })
 
     function flush() {
       self.postMessage({

@@ -38,6 +38,10 @@ export interface ParseResult {
   totalRows: number
   parseErrors: CellError[]
   sheets: string[]
+  /** 配置了但在 Excel 中未找到的列名 */
+  missingColumns?: string[]
+  /** Excel 中的表头但未在 columns 配置中匹配到的列 */
+  unmatchedHeaders?: string[]
 }
 
 export interface RowWithErrors {

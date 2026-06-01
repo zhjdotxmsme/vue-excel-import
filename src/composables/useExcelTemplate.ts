@@ -12,6 +12,9 @@ export async function useExcelTemplate(
   columns: ColumnConfig[],
   options?: TemplateOptions
 ): Promise<Blob> {
+  if (!columns || columns.length === 0) {
+    throw new Error('列配置不能为空，请先配置 columns')
+  }
   const workbook = new ExcelJS.Workbook()
   const sheetName = options?.sheetName ?? 'Sheet1'
   const ws = workbook.addWorksheet(sheetName)
